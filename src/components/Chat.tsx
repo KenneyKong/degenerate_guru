@@ -6,6 +6,18 @@ interface Message {
   content: string;
 }
 
+const fetchPlayerStats = async (playerName: string) => {
+  try {
+    const response = await fetch(`/api/basketball-reference?player=${encodeURIComponent(playerName)}`);
+    if (!response.ok) throw new Error('Failed to fetch stats');
+    const data = await response.json();
+    return data.stats[0]; // Return first matching player
+  } catch (error) {
+    console.error('Error fetching player stats:', error);
+    return null;
+  }
+};
+
 const Chat: FC = () => {
   const [query, setQuery] = useState<string>('');
   const [messageList, setMessageList] = useState<Message[]>([
@@ -30,7 +42,6 @@ const Chat: FC = () => {
 
   const createMessage = async (content: string) => {
     try {
-      // Add user message immediately
       const userMessage: Message = {
         role: 'user',
         content: content
@@ -39,10 +50,67 @@ const Chat: FC = () => {
       setQuery("");
       setWaiting(true);
 
-      // Simulate a small delay for analyzing odds
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Improved pattern matching for stats questions
+      const statsPatterns = [
+        /how many points is (.*?) averaging/i,
+        /what is (.*?) averaging/i,
+        /what are (.*?)(?:'s)? stats/i,
+        /what(?:'s| is) (.*?)(?:'s)? stats/i,
+        /what is (.*?) avg/i,
+        /(.*?) stats/i,
+        /stats for (.*)/i,
+        /how many (?:3|three) pointers? does (.*?) attempt/i,
+        /how many (?:3|three) point attempts? does (.*?) average/i,
+        /(.*?) (?:3|three) point attempts/i
+      ];
 
-      // Get Guru's response - now using async respond method
+      // Check if it's a stats question
+      let playerName = '';
+      for (const pattern of statsPatterns) {
+        const match = content.match(pattern);
+        if (match) {
+          playerName = match[1] || match[2];
+          break;
+        }
+      }
+
+      if (playerName) {
+        console.log('Fetching stats for player:', playerName);
+        const stats = await fetchPlayerStats(playerName);
+        
+        if (stats) {
+          if (content.toLowerCase().includes('3') || content.toLowerCase().includes('three')) {
+            const response = `${stats.name} (${stats.team}) attempts ${stats.threePointAttempts.toFixed(1)} three-pointers per game this season.`;
+            
+            const assistantMessage: Message = {
+              role: 'assistant',
+              content: response
+            };
+            setMessageList(prev => [...prev, assistantMessage]);
+            setWaiting(false);
+            return;
+          }
+          const response = `${stats.name} (${stats.team}) is averaging ${stats.pointsPerGame.toFixed(1)} PPG, ${stats.reboundsPerGame.toFixed(1)} RPG, and ${stats.assistsPerGame.toFixed(1)} APG this season. He's shooting ${(stats.fieldGoalPercentage * 100).toFixed(1)}% from the field and ${(stats.threePtPercentage * 100).toFixed(1)}% from three.`;
+          
+          const assistantMessage: Message = {
+            role: 'assistant',
+            content: response
+          };
+          setMessageList(prev => [...prev, assistantMessage]);
+          setWaiting(false);
+          return;
+        } else {
+          const notFoundMessage: Message = {
+            role: 'assistant',
+            content: `Sorry, I couldn't find stats for ${playerName}. Please check the spelling or try another player.`
+          };
+          setMessageList(prev => [...prev, notFoundMessage]);
+          setWaiting(false);
+          return;
+        }
+      }
+
+      // If not a stats request or no stats found, continue with regular response
       const guruResponse = await eliza.current.respond(content);
       const assistantMessage: Message = {
         role: 'assistant',
@@ -54,7 +122,6 @@ const Chat: FC = () => {
     } catch (error) {
       console.error("Error in conversation:", error);
       setWaiting(false);
-      // Add error message to chat
       const errorMessage: Message = {
         role: 'assistant',
         content: "Sorry, I'm having trouble accessing the latest sports data. Let me give you some general advice instead."

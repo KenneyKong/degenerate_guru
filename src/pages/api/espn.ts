@@ -1,6 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import puppeteer from 'puppeteer';
 
+interface PlayerStats {
+  name: string;
+  team: string;
+  position?: string;
+  stats: {
+    [key: string]: string | number;  // Flexible stats structure for different sports
+  };
+}
+
 interface GameData {
   sport: string;
   teams: string[];
@@ -295,18 +304,10 @@ export default async function handler(
 
   try {
     const games = await scrapeESPN(sport as SportType);
-    
-    // Sort games by time
-    const sortedGames = games.sort((a, b) => {
-      const timeA = a.time || '';
-      const timeB = b.time || '';
-      return timeA.localeCompare(timeB);
-    });
-
     res.status(200).json({
       sport,
-      gamesCount: sortedGames.length,
-      games: sortedGames
+      gamesCount: games.length,
+      games
     });
   } catch (error) {
     console.error('API handler error:', error);

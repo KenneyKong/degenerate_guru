@@ -1,11 +1,20 @@
-interface GameData {
+export interface GameData {
   sport: string;
   teams: string[];
   time?: string;
   odds?: string;
 }
 
-type SportType = 'nfl' | 'nba' | 'mlb' | 'nhl' | 'ncaaf' | 'ncaab';
+export interface PlayerStats {
+  name: string;
+  team: string;
+  position?: string;
+  stats: {
+    [key: string]: string | number;
+  };
+}
+
+export type SportType = 'nfl' | 'nba' | 'mlb' | 'nhl' | 'ncaaf' | 'ncaab';
 
 export class ESPNScraper {
   private static instance: ESPNScraper;
@@ -203,5 +212,49 @@ export class ESPNScraper {
   async getOddsBySport(sport: SportType): Promise<string[]> {
     const games = await this.getGames(sport);
     return games.map(game => game.odds || '').filter(odds => odds !== '');
+  }
+
+  async getPlayerStats(sport: SportType): Promise<PlayerStats[]> {
+    try {
+      const response = await fetch(`/api/espn?sport=${sport}&type=stats`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch player stats: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      return data.stats || [];
+    } catch (error) {
+      console.error('Error fetching player stats:', error);
+      throw error;
+    }
+  }
+
+  async getPlayerStatsBySport(sport: SportType): Promise<PlayerStats[]> {
+    return await this.getPlayerStats(sport);
+  }
+
+  async getPlayerStatsByTeam(sport: SportType, teamName: string): Promise<PlayerStats[]> {
+    const stats = await this.getPlayerStats(sport);
+    return stats.filter(player => 
+      player.team.toLowerCase().includes(teamName.toLowerCase())
+    );
+  }
+
+  async getPlayerStatsByName(sport: SportType, playerName: string): Promise<PlayerStats[]> {
+    const stats = await this.getPlayerStats(sport);
+    return stats.filter(player => 
+      player.name.toLowerCase().includes(playerName.toLowerCase())
+    );
   }
 }
